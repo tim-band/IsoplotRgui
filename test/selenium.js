@@ -5,6 +5,7 @@ const { Builder, By, Key, until } = require('selenium-webdriver');
 const Mocha = require('mocha');
 const clipboardy = require("clipboardy");
 const PNG = require("pngjs").PNG;
+const assert = require('assert');
 
 const mocha = new Mocha();
 
@@ -35,7 +36,13 @@ describe('IsoplotRgui', function testConcordia() {
         this.timeout(10000);
         await driver.get('http://localhost:50054');
         await driver.wait(driver => tryToClearGrid(driver), 3000);
-        await inputTestData(driver);
+        const u235toU238 = 137.818;
+        const testData = [
+            ['25.2', '0.03', '0.0513', '0.0001'],
+            ['25.4', '0.02', '0.0512', '0.0002'],
+            ['27.1', '0.01', '0.05135', '0.00005']
+        ];
+        await inputTestData(driver, testData);
         await clickButton(driver, 'options');
         await driver.wait(until.elementIsVisible(driver.findElement(By.id('maxx'))));
         const minx = '0.249', maxx = '0.286', miny = '0.0359', maxy = '0.0406';
@@ -45,12 +52,42 @@ describe('IsoplotRgui', function testConcordia() {
         await inputText(driver, 'maxy', maxy);
         await clickButton(driver, 'plot');
         const png = await getPlotPng(driver);
-        let limits = findPlotLimits(png);
+        const rPlotMarginFactor = 0.04;
+        const limits = findPlotLimits(png);
+        const rangex0 = Number(maxx) - Number(minx);
+        const minxn = Number(minx) - rangex0 * rPlotMarginFactor;
+        const rangex = rangex0 * (1 +  2 * rPlotMarginFactor);
+        const rangey0 = Number(maxy) - Number(miny);
+        const minyn = Number(miny) - rangey0 * rPlotMarginFactor;
+        const rangey = rangey0 * (1 + 2 * rPlotMarginFactor); 
+        const plotWidth = limits.right - limits.left;
+        const plotHeight = limits.bottom - limits.top;
+        console.log(limits.left, limits.top, limits.right, limits.bottom);
+        testData.forEach(data => {
+            console.log(data);
+            const x = data[2] * u235toU238 / data[0];
+            const y = 1 / data[0];
+            console.log(x + ',' + y);
+            const plotX = Math.round(limits.left + plotWidth * (x - minxn) / rangex);
+            const plotY = Math.round(limits.bottom - plotHeight * (y - minyn) / rangey);
+            console.log(plotX + ',' + plotY);
+            // should really calculate the slope and extent of the blob properly
+            const blobTop = findBlobEdge(png, plotX, plotY, 0, -1).y;
+            const blobBottom = findBlobEdge(png, plotX, plotY, 0, 1).y;
+            const blobLeft = findBlobEdge(png, plotX, plotY, -1, 0).x;
+            const blobRight = findBlobEdge(png, plotX, plotY, 1, 0).x;
+            console.log('blob dimensions are (' + blobLeft + ', ' + blobTop + '), (' + blobRight + ', ' + blobBottom + ')');
+        });
     });
 });
 
+function findBlobEdge(png, x, y, dx, dy) {
+    const green = findColour(png, 2, x, y, dx, dy);
+    return findColour(png, 0, green.x, green.y, dx, dy);
+}
+
 async function getPlotPng(driver) {
-    const plotSrc = await driver.findElement(By.css('#myplot img')).getAttribute('src');
+    const plotSrc = await driver.wait(until.elementLocated(By.css('#myplot img'))).getAttribute('src');
     const plot = plotSrc.substring(plotSrc.indexOf(',') + 1);
     return PNG.sync.read(Buffer.from(plot, 'base64'));
 }
@@ -60,13 +97,15 @@ function findPlotLimits(png) {
     const top = findColour(png, 0, middleX, 0, 0, 1).y;
     const left = findColour(png, 7, middleX, top, -1, 0).x + 1;
     const middleY = Math.floor(png.height / 2);
-    const right = findColour(png, 0, png.width, middleY, -1, 0).x;
+    const right = findColour(png, 0, png.width - 1, middleY, -1, 0).x;
     const bottom = findColour(png, 7, right, middleY, 0, 1).y - 1;
     return { top, bottom, left, right };
 }
 
 function findColour(png, colour, x, y, dx, dy) {
-    while (pixelColour(png, x, y) !== colour) {
+    while (pixelColour(png, x, y) !== colour
+            && 0 <= x && x < png.width
+            && 0 <= y && y < png.height) {
         x += dx;
         y += dy;
     }
@@ -75,7 +114,10 @@ function findColour(png, colour, x, y, dx, dy) {
 
 function pixelColour(png, x, y) {
     let p = 4 * (x + png.width * y);
-    return (png.data[p] < 128 ? 0 : 4) + (png.data[p + 1] < 128 ? 0 : 2) + (png.data[p + 2] < 128 ? 0 : 1);
+    let colour = (png.data[p] < 128 ? 0 : 4) + (png.data[p + 1] < 128 ? 0 : 2) + (png.data[p + 2] < 128 ? 0 : 1);
+    if (colour !== 7)
+        console.log(colour + '@' + x + ',' + y);
+    return colour;
 }
 
 // Clicks 'Clear' button then reports if the grid (or at least the home cell)
@@ -86,11 +128,13 @@ async function tryToClearGrid(driver) {
     return await homeCell.getText() === '';
 }
 
-async function inputTestData(driver) {
+async function inputTestData(driver, testData) {
     await goToCell(driver, 1, 1);
     const box = await driver.switchTo().activeElement();
-    await box.sendKeys('25.2', Key.TAB, '0.03', Key.TAB, '0.0513', Key.TAB, '0.0001', Key.RETURN);
-    clipboardy.writeSync('25.4\t0.02\t0.0512\t0.0002\n27.1\t0.01\t0.05135\t0.00005');
+    // write the first line in by typing it
+    await box.sendKeys(testData[0][0], Key.TAB, testData[0][1], Key.TAB, testData[0][2], Key.TAB, testData[0][3], Key.RETURN);
+    // write the other lines in by pasting them
+    clipboardy.writeSync(testData.slice(1).map(ds => ds.join('\t')).join('\n'));
     await goToCell(driver, 2, 1);
     const box2 = await driver.switchTo().activeElement();
     await box2.sendKeys(Key.CONTROL + 'v');
