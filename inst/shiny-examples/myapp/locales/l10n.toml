@@ -1,0 +1,4 @@
+basepath = "inst/shiny-examples/myapp/locales"
+[[paths]]
+    reference = "en/*"
+    l10n = "{locale}/*"
