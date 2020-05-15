@@ -4,7 +4,8 @@
     "private": true,
     "scripts": {
         "test": "node test/selenium.js",
-        "translate": "node build/gather_translations.js"
+        "translate": "node build/gather_translations.js",
+        "generate-translation-files" : "node build/degather_translations.js"
     },
     "devDependencies": {
         "selenium-webdriver": "^4.0.0-alpha.7",

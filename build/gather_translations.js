@@ -1,17 +1,20 @@
 var fs = require('fs');
+var translation = require('./translation_config');
 
 const appBase = 'inst/shiny-examples/myapp/';
 const localesDir = appBase + 'locales/';
 
 function gather(dc) {
     let out = {};
-    for (language in dc) {
+    for (const language in dc) {
         transs = dc[language];
         for (const message in transs) {
             if (!(message in out)) {
                 out[message] = {};
             }
-            out[message][language] = transs[message]['message'];
+            const targetLanguage = language in translation.languageRenames?
+                translation.languageRenames[language] : language;
+            out[message][targetLanguage] = transs[message]['message'];
         }
     }
     return out;
@@ -30,8 +33,9 @@ function gatherFile(filename) {
         allLangs[language] = JSON.parse(text);
     });
     const byMessage = gather(allLangs);
-    fs.writeFileSync(appBase + 'www/js/' + filename, JSON.stringify(byMessage));
+    fs.writeFileSync(appBase + 'www/' + filename, JSON.stringify(byMessage));
 }
 
-gatherFile('dictionary_id.json');
-gatherFile('dictionary_class.json');
+translation.filenames.forEach(function(filename) {
+    gatherFile(filename);
+});

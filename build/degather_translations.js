@@ -1,6 +1,12 @@
 // Writes out files in locales directory from the files in the www/js
 // directory. Should never have to do this.
 var fs = require('fs');
+var translation = require('./translation_config');
+
+let renames = {};
+for (const lang in translation.languageRenames) {
+    renames[translation.languageRenames[lang]] = lang;
+}
 
 const appBase = 'inst/shiny-examples/myapp/';
 const localesDir = appBase + 'locales/';
@@ -19,17 +25,28 @@ function degather(dc) {
 function writeLocale(filename, byLang) {
     for (let lang in byLang) {
         const out = JSON.stringify(byLang[lang]);
-        fs.writeFileSync(localesDir + lang + '/' + filename, out);
+        if (lang in renames) {
+            lang = renames[lang];
+        }
+        const dir = localesDir + lang;
+        const lastSlash = filename.lastIndexOf('/');
+        const allDir = 0 <= lastSlash?
+                dir + '/' + filename.substring(0, lastSlash)
+                : dir;
+        if (!fs.existsSync(allDir)) {
+            fs.mkdirSync(allDir, { recursive: true });
+        }
+        fs.writeFileSync(dir + '/' + filename, out);
     }
 }
 
 function degatherFile(filename) {
-    const text = fs.readFileSync(appBase + 'www/js/' + filename, 'utf8');
+    const text = fs.readFileSync(appBase + 'www/' + filename, 'utf8');
     const dict = JSON.parse(text);
     const byLanguage = degather(dict);
-    console.log(byLanguage);
     writeLocale(filename, byLanguage);
 }
 
-degatherFile('dictionary_id.json');
-degatherFile('dictionary_class.json');
+translation.filenames.forEach(function(filename) {
+    degatherFile(filename);
+});
