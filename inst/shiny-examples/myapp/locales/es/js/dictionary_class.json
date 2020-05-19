@@ -1,5 +1,8 @@
 {
     "age": {
         "message": "edad"
+    },
+    "help_helioplot_models": {
+        "message": "Modelo:"
     }
 }
