@@ -180,11 +180,17 @@ describe('IsoplotRgui', function() {
                 };
                 await performClick(driver, 'options');
                 await performType(driver, options);
-                // 6/4 err, 7/4, err
+                // 6/4, err, 7/4, err
                 const testData = [
                     [115, 0.2, 75, 0.3],
                     [140, 0.6, 92, 0.5],
                     [152, 0.3, 100, 0.2]
+                ];
+                // Ideally we would calculate these
+                const testResults = [
+                    { bottom: 4667.4, top: 4691.5 },
+                    { bottom: 4658.5, top: 4697.2 },
+                    { bottom: 4671.5, top: 4687.5 }
                 ];
                 await clearGrid(driver);
                 await inputTestData(driver, testData);
@@ -198,12 +204,17 @@ describe('IsoplotRgui', function() {
                     const { top, bottom } = getBar(png, x, 'G');
                     const mint = (axes.bottom - bottom) / axes.height * ranget + options.mint;
                     const maxt = (axes.bottom - top) / axes.height * ranget + options.mint;
-                    console.log(x, mint, maxt);
+                    assertNear(mint, testResults[i].bottom, 0.1);
+                    assertNear(maxt, testResults[i].top, 0.1);
                 }
             });
         });
     });
 });
+
+function assertNear(actual, expected, delta) {
+    assert(expected - delta < actual && actual << expected + delta);
+}
 
 // finds a vertical solid colour `col` at pixel position x
 function getBar(png, x, col) {
