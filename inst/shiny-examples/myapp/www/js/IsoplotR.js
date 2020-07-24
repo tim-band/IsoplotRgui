@@ -19,7 +19,8 @@ $(function(){
 	    settings: null,
 	    data: null,
 	    data4server: [],
-	    optionschanged: false
+		optionschanged: false,
+		datachanged: false
 	}
 	withData(function(constants, settings, data) {
 	    IsoplotR.constants = constants;
@@ -53,9 +54,8 @@ $(function(){
 	    welcome();
 	    $("#INPUT").handsontable({ // add change handler asynchronously
 		afterChange: function(changes,source){
-		    getData4Server(); // placed here because we don't want to
-		    handson2json();   // call the change handler until after
-		}                     // IsoplotR has been initialised
+			IsoplotR.datachanged = true;
+		}
 	    });
 	});
     };
@@ -207,6 +207,7 @@ $(function(){
 	    data: handson.data,
 	    colHeaders: handson.headers
 	});
+	IsoplotR.datachanged = true;
 	
 	$("#language").val(IsoplotR.settings.language);
 	$("#language").selectmenu("refresh");
@@ -267,7 +268,6 @@ $(function(){
 	    });
 	}
 	out.data[geochronometer] = mydata;
-	out.optionschanged = false;
 	IsoplotR = out;
     }
     
@@ -1934,12 +1934,14 @@ $(function(){
     }
 
     function update(){
-	getData4Server();
+	if (IsoplotR.datachanged){
+		getData4Server();
+		handson2json();
+		IsoplotR.datachanged =false;
+	}
 	if (IsoplotR.optionschanged){
-	    recordSettings();
+		recordSettings();
 	    IsoplotR.optionschanged = false;
-	} else {
-	    handson2json();
 	}
 	Shiny.onInputChange("data",IsoplotR.data4server);
 	Shiny.onInputChange("Rcommand",getRcommand(IsoplotR));
@@ -2334,12 +2336,15 @@ $(function(){
 	    IsoplotR.settings.geochronometer =
 		$('option:selected', $("#geochronometer")).attr('id');
 	    selectGeochronometer();
-	    changePlotDevice();
-	    IsoplotR.optionschanged = false;
+		changePlotDevice();
+		IsoplotR.datachanged = true;
 	}
     });
     $("#plotdevice").selectmenu({
-	change: function( event, ui ) { changePlotDevice(); }
+	change: function( event, ui ) {
+		changePlotDevice();
+		IsoplotR.datachanged = true;
+	}
     });
     $("#language").selectmenu({
 	change: function( event, ui ) { changeLanguage(ui.item.value); }
@@ -2396,7 +2401,7 @@ $(function(){
 		fname = "options/" + plotdevice + ".html";
 		$("#plotdevice-options").load(fname,function(){
 		    showSettings(geochronometer);
-		    showSettings(plotdevice);
+			showSettings(plotdevice);
 		    IsoplotR.optionschanged = true;
 		});
 	    });
@@ -2404,7 +2409,7 @@ $(function(){
     });
 
     $("#HELP").click(function(){
-	IsoplotR.optionschanged = false;
+	update();
 	var plotdevice = IsoplotR.settings.plotdevice;
 	var geochronometer = IsoplotR.settings.geochronometer;
 	var fname = "";

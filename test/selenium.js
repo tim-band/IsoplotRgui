@@ -45,8 +45,9 @@ describe('IsoplotRgui', function() {
         it('is readable from the calculation engine', async function() {
             this.timeout(8000);
             await driver.get('http://localhost:50054');
+            await choosePlotDevice(driver, 'ages');
             await driver.wait(until.elementLocated(cellInTable('INPUT', 1, 1)));
-            await driver.wait(() => tryToClearGrid(driver));
+            await clearGrid(driver);
             const u235toU238 = 137.818;
             const testData = [
                 ['25.2', '0.03', '0.0513', '0.0001'],
@@ -54,7 +55,6 @@ describe('IsoplotRgui', function() {
                 ['27.1', '0.01', '0.05135', '0.00005']
             ];
             await inputTestData(driver, testData);
-            await choosePlotDevice(driver, 'ages');
             await clickButton(driver, 'run');
             const expectedResults = [
                 [251.1, 0.51, 250.86, 0.29, 253.3, 4.48, 250.88, 0.29],
@@ -81,7 +81,6 @@ describe('IsoplotRgui', function() {
         const propagateEN = 'Propagate external uncertainties?';
         const ratiosEN = 'ratios.';
         const helpEN = 'Help';
-        this.timeout(25000);
         it('displays the correct language', async function() {
             // test that English is working without choosing it
             await testTranslation(driver, false, helpEN, ratiosEN,
@@ -128,46 +127,122 @@ describe('IsoplotRgui', function() {
         });
     });
 
-    describe('the plots', function() {
-        it('appear to work', async function() {
-            await driver.get('http://localhost:50054');
-            // 38/06, err, 07/06, err
-            const testData = [
-                [25.2, 0.03, 0.0513, 0.0001],
-                [25.4, 0.02, 0.0512, 0.0002],
-                [27.1, 0.01, 0.05135, 0.00005]
-            ];
-            await driver.wait(() => tryToClearGrid(driver));
-            await inputTestData(driver, testData);
-            await choosePlotDevice(driver, 'concordia');
-            await performClick(driver, 'options');
-            const options = {
-                U238U235: 137.818,
-                errU238U235: 0.0225,
-                minx: 0.260,
-                maxx: 0.282,
-                miny: 0.0368,
-                maxy: 0.0400,
-                ellipsefill: "'green'",
-                ellipsestroke: "'green'"
-            };
-            await performType(driver, options);
-            await performClick(driver, 'plot');
-            const img = await driver.wait(until.elementLocated(By.css('#myplot img')));
-            const imgSrc = await img.getAttribute('src');
-            const imgB64 = imgSrc.split(',')[1];
-            testData.forEach((data) => {
-                const failures = assertConcordiaBlob(imgB64, options, data, 1500);
-                // some failures are caused by other marks on the graph; labels or
-                // other blobs, for example.
-                assert(failures.length <= 10, 'Too many failures: ' + failures.join(', '));
+    describe('the plot', function() {
+        describe('concordia UPb', function() {
+            it('appears to work', async function() {
+                await driver.get('http://localhost:50054');
+                // 38/06, err, 07/06, err
+                const testData = [
+                    [25.2, 0.03, 0.0513, 0.0001],
+                    [25.4, 0.02, 0.0512, 0.0002],
+                    [27.1, 0.01, 0.05135, 0.00005]
+                ];
+                await clearGrid(driver);
+                await inputTestData(driver, testData);
+                await choosePlotDevice(driver, 'concordia');
+                const options = {
+                    U238U235: 137.818,
+                    errU238U235: 0.0225,
+                    minx: 0.260,
+                    maxx: 0.282,
+                    miny: 0.0368,
+                    maxy: 0.0400,
+                    ellipsefill: "'green'",
+                    ellipsestroke: "'black'"
+                };
+                await performClick(driver, 'options');
+                await performType(driver, options);
+                await performClick(driver, 'plot');
+                const png = await getPlotImage(driver);
+                testData.forEach((data) => {
+                    const failures = assertConcordiaBlob(png, options, data, 1500);
+                    // some failures are caused by other marks on the graph; labels or
+                    // other blobs, for example.
+                    assert(failures.length <= 5, 'Too many failures: ' + failures.join(', '));
+                });
+            });
+        });
+        describe('weighted mean PbPb', function() {
+            it('appears to work', async function() {
+                await driver.get('http://localhost:50054');
+                await chooseGeochronometer(driver, 'Pb-Pb');
+                await choosePlotDevice(driver, 'weighted mean');
+                const options = {
+                    U238U235: 137.818,
+                    errU238U235: 0.0225,
+                    "PbPb-formats": "Normal",
+                    mint: 4650,
+                    maxt: 4700,
+                    LambdaU238: 0.000155125,
+                    errLambdaU238: 8.3e-8,
+                    LambdaU235: 0.00098485,
+                    errLambdaU235: 6.7e-7
+                };
+                await performClick(driver, 'options');
+                await performType(driver, options);
+                // 6/4 err, 7/4, err
+                const testData = [
+                    [115, 0.2, 75, 0.3],
+                    [140, 0.6, 92, 0.5],
+                    [152, 0.3, 100, 0.2]
+                ];
+                await clearGrid(driver);
+                await inputTestData(driver, testData);
+                await performClick(driver, 'plot');
+                const png = await getPlotImage(driver);
+                const axes = getAxes(png);
+                const ranget = options.maxt - options.mint;
+                const barWidth = floor((axes.width + 1) / (testData.length - 1));
+                for (const i in testData) {
+                    const x = axes.left + barWidth * i;
+                    const { top, bottom } = getBar(png, x, 'G');
+                    const mint = (axes.bottom - bottom) / axes.height * ranget + options.mint;
+                    const maxt = (axes.bottom - top) / axes.height * ranget + options.mint;
+                    console.log(x, mint, maxt);
+                }
             });
         });
     });
 });
 
-function assertConcordiaBlob(imgB64, options, testData, sampleCount) {
-    const png = PNG.sync.read(Buffer.from(imgB64, 'base64'));
+// finds a vertical solid colour `col` at pixel position x
+function getBar(png, x, col) {
+    let top = 0;
+    let run = 0;
+    const runThreshold = 4;
+    let y;
+    for (y = 0; y != png.height && run != runThreshold; ++y) {
+        if (colour(png, {x, y}) === col) {
+            if (run === 0) {
+                top = y;
+            }
+            ++run;
+        } else {
+            run = 0;
+        }
+    }
+    let bottom = top;
+    run = 0;
+    for (; y != png.height && run != runThreshold; ++y) {
+        if (colour(png, {x, y}) === col) {
+            run = 0;
+        } else {
+            bottom = y;
+            ++run;
+        }
+    }
+    return { top, bottom };
+}
+
+// gets PNG of plot
+async function getPlotImage(driver) {
+    const img = await driver.wait(until.elementLocated(By.css('#myplot img')));
+    const imgSrc = await img.getAttribute('src');
+    const imgB64 = imgSrc.split(',')[1];
+    return PNG.sync.read(Buffer.from(imgB64, 'base64'));
+}
+
+function assertConcordiaBlob(png, options, testData, sampleCount) {
     const axes = getAxes(png);
     const ranges = getRanges(options);
     const [u38pb06, u38pb06err, pb07pb06, pb07pb06err] = testData;
@@ -199,6 +274,7 @@ function assertConcordiaBlob(imgB64, options, testData, sampleCount) {
         const col = colour(png, pixel);
         const expectedCol = h2 < minimumGreenDistanceSquared ? 'G' : 'W';
         if (expectedCol !== col
+            && (col === 'G' || col === 'W')
             && (h2 < minimumGreenDistanceSquared
                 || maximumGreenDistanceSquared < h2)) {
             failures.push('Expected colour ' + expectedCol
@@ -230,7 +306,7 @@ function colour(png, pixel) {
 function isLinePixel(png, index) {
     const d = png.data;
     const brightness = d[index] + d[index + 1] + d[index + 2];
-    return brightness < 350;
+    return brightness < 450;
 }
 
 function isOnHorizontalLine(png, index) {
@@ -245,6 +321,7 @@ function isOnHorizontalLine(png, index) {
     return true;
 }
 
+// returns the index of a point on the bottom line
 function findBottomLine(png) {
     const width = png.width;
     const row = width * 4;
@@ -254,7 +331,7 @@ function findBottomLine(png) {
     const giveUp = index - row * floor(png.height / 3);
     for (; giveUp <= index; index -= row) {
         if (isLinePixel(png, index) && isOnHorizontalLine(png, index)) {
-            return floor(index / row);
+            return index;
         }
     }
     return null;
@@ -273,6 +350,7 @@ function isOnVerticalLine(png, index) {
     return true;
 }
 
+// returns the index of a point on the bottom line
 function findLeftLine(png) {
     const width = png.width;
     const row = width * 4;
@@ -281,7 +359,7 @@ function findLeftLine(png) {
     const giveUp = startIndex + floor(width / 3) * 4;
     for (let index = startIndex; index < giveUp; index += 4) {
         if (isLinePixel(png, index) && isOnVerticalLine(png, index)) {
-            return floor((index - startIndex) / 4);
+            return index;
         }
     }
     return null;
@@ -303,18 +381,18 @@ function lineEndIndex(png, index, dIndex) {
 }
 
 function getAxes(png) {
-    const originX = findLeftLine(png);
-    const originY = findBottomLine(png);
+    const leftLinePoint = findLeftLine(png);
+    const bottomLinePoint = findBottomLine(png);
     const row = png.width * 4;
-    const originRowStart = originY * row;
-    const originIndex = originRowStart + originX * 4;
-    const topIndex = lineEndIndex(png, originIndex, -row);
-    const rightIndex = lineEndIndex(png, originIndex, 4);
+    const topIndex = lineEndIndex(png, leftLinePoint, -row);
+    const bottomIndex = lineEndIndex(png, leftLinePoint, row);
+    const leftIndex = lineEndIndex(png, bottomLinePoint, -4);
+    const rightIndex = lineEndIndex(png, bottomLinePoint, 4);
     return {
-        bottom: originY,
-        left: originX,
-        height: originY - floor(topIndex / row),
-        width: floor((rightIndex - originRowStart) / 4) - originX
+        bottom: floor(bottomIndex / row),
+        left: (leftIndex / 4) % png.width,
+        height: floor((bottomIndex - topIndex) / row),
+        width: floor((rightIndex - leftIndex) / 4)
     };
 }
 
@@ -357,15 +435,14 @@ async function testTranslation(driver, language, help, ratios,
     await driver.get('http://localhost:50054');
     if (language) {
         await chooseLanguage(driver, language);
-    } else {
-        // for some reason we have to click the header or
-        // the Help button won't click under Selenium
-        await driver.findElement(By.css('main header')).click();
     }
     // test dictionary_id.json
     await assertTextContains(driver, 'help', help);
-    await clickButton(driver, 'help');
-    await assertTextContains(driver, 'UPb_86', ratios);
+    await clickFindThen(driver, 'help', By.id('UPb_86'), async function(element) {
+        const text = await element.getText();
+        assert(text.search(ratios));
+        return true;
+    });
     // test dictionary_class.json
     await clickButton(driver, 'options');
     await assertTextContains(driver, 'help_exterr_UPb', propagate);
@@ -395,17 +472,48 @@ function assertNearlyEqual(a, b) {
     assert(b - db < a && a < b + db, a + ' is not nearly ' + b);
 }
 
+// Clicks element (or id) `clickFirst`, then finds element by `clickSecondLocator`,
+// then calls `thenDo` with argument the element found by the locator.
+// If the locator fails to find an element it tries again.
+// `thenDo` should return true to succeed, false to retry, or fail an assertion
+// to fail.
+async function clickFindThen(driver, clickFirst, clickSecondLocator, thenDo) {
+    const button = typeof(clickFirst) === 'string'?
+        await driver.wait(until.elementLocated(By.id(clickFirst))) : clickFirst;
+    await driver.wait(async function() {
+        let seconds = await driver.findElements(clickSecondLocator);
+        if (!!seconds.length && await thenDo(seconds[0])) {
+            return true;
+        }
+        await button.click();
+    });
+}
+
+async function selectMenuItem(driver, buttonId, menuId, choiceText) {
+    await clickFindThen(driver, buttonId,
+        By.xpath(`//ul[@id='${menuId}']/li/div[contains(text(),'${choiceText}')]`),
+        async function (choice) {
+            if (await choice.isEnabled() && await choice.isDisplayed()) {
+                await performClick(driver, choice);
+                return true;
+            }
+            return false;
+        }
+    );
+}
+
 async function choosePlotDevice(driver, choiceText) {
-    await performClick(driver, 'plotdevice-button');
-    const menu = await driver.findElement(By.id('plotdevice-menu'));
-    const choice = await menu.findElement(By.xpath("//li/div[contains(text(),'" + choiceText + "')]"));
-    await driver.wait(until.elementIsVisible(choice));
-    await performClick(driver, choice);
+    await selectMenuItem(driver, 'plotdevice-button', 'plotdevice-menu', choiceText);
+}
+
+async function chooseGeochronometer(driver, choiceText) {
+    await selectMenuItem(driver, 'geochronometer-button', 'geochronometer-menu', choiceText);
 }
 
 async function chooseLanguage(driver, languageText) {
     await performClick(driver, 'language-button');
-    const arbitraryLanguageChoice = await driver.wait(until.elementLocated(By.css('#language-menu li')));
+    const arbitraryLanguageChoice = await driver.wait(
+        until.elementLocated(By.css('#language-menu li')));
     await driver.wait(until.elementIsVisible(arbitraryLanguageChoice));
     const choice = await findMenuItem(driver, languageText);
     await performClick(driver, choice);
@@ -415,6 +523,7 @@ async function chooseLanguage(driver, languageText) {
 async function performClick(driver, element) {
     if (typeof(element) === 'string') {
         element = await driver.wait(until.elementLocated(By.id(element)));
+        await driver.wait(until.elementIsEnabled(element));
     }
     await driver.actions()
         .move({origin: element})
@@ -424,12 +533,24 @@ async function performClick(driver, element) {
     return element;
 }
 
-// super robust typing into input box
+// super robust typing into input box or selecting from input
 async function performType(driver, idToKeys) {
     for (const k in idToKeys) {
         const input = await performClick(driver, k);
-        await input.clear();
-        await input.sendKeys(idToKeys[k]);
+        const tag = await input.getTagName();
+        if (tag === "input") {
+            await input.clear();
+            await input.sendKeys(idToKeys[k]);
+        } else if (tag === "select") {
+            const choice = await driver.wait(until.elementLocated(
+                By.xpath(`//select[@id='${k}']//option[contains(text(),'${idToKeys[k]}')]`)));
+            // For some reason performClick() doesn't really work for select elements
+            await input.click();
+            await driver.wait(until.elementIsVisible(choice));
+            await choice.click();
+        } else {
+            assert.fail(`element with id ${k} has unexpected tag ${tag}`);
+        }
     }
 }
 
@@ -440,6 +561,10 @@ async function tryToClearGrid(driver) {
     const homeCell = await driver.findElement(cellInTable('INPUT', 1, 1));
     const text = await homeCell.getText();
     return text === '';
+}
+
+async function clearGrid(driver) {
+    await driver.wait(() => tryToClearGrid(driver));
 }
 
 async function testUndoInTable(driver) {
