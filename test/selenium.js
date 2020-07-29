@@ -167,6 +167,11 @@ describe('IsoplotRgui', function() {
                 await driver.get('http://localhost:50054');
                 await chooseGeochronometer(driver, 'Pb-Pb');
                 await choosePlotDevice(driver, 'weighted mean');
+                const testResults = [
+                    { bottom: 4667.4, top: 4691.5 },
+                    { bottom: 4658.5, top: 4697.2 },
+                    { bottom: 4671.5, top: 4687.5 }
+                ];
                 const options = {
                     U238U235: 137.818,
                     errU238U235: 0.0225,
@@ -178,20 +183,18 @@ describe('IsoplotRgui', function() {
                     LambdaU235: 0.00098485,
                     errLambdaU235: 6.7e-7
                 };
-                await performClick(driver, 'options');
-                await performType(driver, options);
-                // 6/4, err, 7/4, err
-                const testData = [
+                /*const testData = [
                     [115, 0.2, 75, 0.3],
                     [140, 0.6, 92, 0.5],
                     [152, 0.3, 100, 0.2]
-                ];
-                // Ideally we would calculate these
-                const testResults = [
-                    { bottom: 4667.4, top: 4691.5 },
-                    { bottom: 4658.5, top: 4697.2 },
-                    { bottom: 4671.5, top: 4687.5 }
-                ];
+                ];*/
+                const testData = [[115], [140], [152]];
+                for (const i in testData) {
+                    weightedMeanPbPbUpdateTestData(testData[i], testResults[i], options);
+                    console.log(testData[i]);
+                }
+                await performClick(driver, 'options');
+                await performType(driver, options);
                 await clearGrid(driver);
                 await inputTestData(driver, testData);
                 await performClick(driver, 'plot');
@@ -204,16 +207,54 @@ describe('IsoplotRgui', function() {
                     const { top, bottom } = getBar(png, x, 'G');
                     const mint = (axes.bottom - bottom) / axes.height * ranget + options.mint;
                     const maxt = (axes.bottom - top) / axes.height * ranget + options.mint;
-                    assertNear(mint, testResults[i].bottom, 0.1);
-                    assertNear(maxt, testResults[i].top, 0.1);
+                    assertNear(mint, testResults[i].bottom, 0.1, 'Min time');
+                    assertNear(maxt, testResults[i].top, 0.1, 'Max time');
                 }
             });
         });
     });
 });
 
-function assertNear(actual, expected, delta) {
-    assert(expected - delta < actual && actual << expected + delta);
+// Sets data[1], data[2] and  data[3] as the error in the
+// ratio of 206Pb to 204Pb, the ratio of 207Pb to 204Pb and the
+// error of the ratio of 207Pb to 204Pb.
+// data[0] must already be set as ratio of 206Pb to 204Pb.
+// options needs the following fields set:
+// * LambdaU238 and errLambdaU238: decay constant of 238U
+// * LambdaU235 and errLambdaU235: decay constant of 235U
+// * U238U235 and errU238U235: initial ratio of 238U to 235U.
+// result.bottom to result.top is the size of the bar we want output.
+function weightedMeanPbPbUpdateTestData(data, result, options) {
+    const age2 = result.top + result.bottom;
+    const age = age2 / 2;
+    const ageErr = (result.top - result.bottom) / age2;
+    const decay238 = Math.exp(age * options.LambdaU238);
+    const pb206 = options.U238U235 * (decay238 - 1);
+    const err238 = options.errLambdaU238 / options.LambdaU238;
+    const err238235 = options.errU238U235 / options.U238U235;
+    const decay238Err = Math.sqrt(ageErr * ageErr + err238 * err238);
+    const pb206err = Math.sqrt(err238235 * err238235 + decay238Err * decay238Err);
+
+    const decay235 = Math.exp(age * options.LambdaU235);
+    const pb207 = decay235 - 1;
+    const err235 = options.errLambdaU235 / options.LambdaU235;
+    const pb207err = Math.sqrt(ageErr * ageErr + err235 * err235);
+
+    const pb206pb204 = data[0];
+    data[1] = roundd(pb206err * pb206pb204, 2);
+    const pb207pb204 = pb206pb204 * pb207 / pb206;
+    data[2] = roundd(pb207pb204, 2);
+    data[3] = roundd(pb207err * pb207pb204, 2);
+}
+
+function roundd(x, n) {
+    let p = Math.pow(10,n);
+    return Math.round(x * p) / p;
+}
+
+function assertNear(actual, expected, delta, name) {
+    assert(expected - delta < actual && actual << expected + delta,
+        name + ' is ' + actual + ', which is not near ' + expected);
 }
 
 // finds a vertical solid colour `col` at pixel position x
