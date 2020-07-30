@@ -188,7 +188,7 @@ describe('IsoplotRgui', function() {
                     [140, 0.6, 92, 0.5],
                     [152, 0.3, 100, 0.2]
                 ];*/
-                const testData = [[115], [140], [152]];
+                const testData = [[115, 0.2], [140, 0.6], [152, 0.3]];
                 for (const i in testData) {
                     weightedMeanPbPbUpdateTestData(testData[i], testResults[i], options);
                     console.log(testData[i]);
@@ -215,36 +215,58 @@ describe('IsoplotRgui', function() {
     });
 });
 
-// Sets data[1], data[2] and  data[3] as the error in the
-// ratio of 206Pb to 204Pb, the ratio of 207Pb to 204Pb and the
-// error of the ratio of 207Pb to 204Pb.
-// data[0] must already be set as ratio of 206Pb to 204Pb.
+// Sets data[2] and data[3] as the ratio of 207Pb to 204Pb and the
+// error thereof
+// data[0] must already be set as ratio of 206Pb to 204Pb and
+// data[1] to the error thereof.
 // options needs the following fields set:
 // * LambdaU238 and errLambdaU238: decay constant of 238U
 // * LambdaU235 and errLambdaU235: decay constant of 235U
 // * U238U235 and errU238U235: initial ratio of 238U to 235U.
 // result.bottom to result.top is the size of the bar we want output.
 function weightedMeanPbPbUpdateTestData(data, result, options) {
-    const age2 = result.top + result.bottom;
-    const age = age2 / 2;
-    const ageErr = (result.top - result.bottom) / age2;
-    const decay238 = Math.exp(age * options.LambdaU238);
-    const pb206 = options.U238U235 * (decay238 - 1);
-    const err238 = options.errLambdaU238 / options.LambdaU238;
-    const err238235 = options.errU238U235 / options.U238U235;
-    const decay238Err = Math.sqrt(ageErr * ageErr + err238 * err238);
-    const pb206err = Math.sqrt(err238235 * err238235 + decay238Err * decay238Err);
+    // let e238t = exp(λ238 * t)
+    // let pb206growth = e238t - 1
+    // let pb206 = U238235 * pb206growth
+    // let e235t = exp(λ235*t)
+    // let pb207 = e235t - 1
+    // let R = pb206/pb207
+    // then dR/dt = U238U235 * (pb206growth * λ238 * e235t - pb207 * λ238 * e238t) / pb207^2
+    // dR/dλ238 = -t * e238t / pb207
+    // dR/dλ235 = pb206growth * t * e238t / pb207^2
+    // assuming that errors δλ238, δλ238 and δt are independent (not
+    // necessarily a safe assumption):
+    // δR = sqrt((δλ238*dR/dλ238)^2 + (δλ235*dR/dλ235)^2 + (δt*dR/dt)^2)
+    const { LambdaU235, LambdaU238, U238U235 } = options;
+    const age = (result.top + result.bottom) / 2;
+    const ageErr = (result.top - result.bottom) / 2;
 
-    const decay235 = Math.exp(age * options.LambdaU235);
-    const pb207 = decay235 - 1;
-    const err235 = options.errLambdaU235 / options.LambdaU235;
-    const pb207err = Math.sqrt(ageErr * ageErr + err235 * err235);
+    const e238t = Math.exp(age * LambdaU238);
+    const pb206growth = e238t - 1;
+    const pb206 = U238U235 * pb206growth;
+    const e235t = Math.exp(age * LambdaU235);
+    const pb207 = e235t - 1;
+    const pb207sqared = Math.pow(pb207, 2);
+
+    const dRdt = U238U235 * (
+        pb206growth * LambdaU235 * e235t
+        - pb207 * LambdaU238 * e238t
+        ) / pb207sqared;
+    const dRd238 = -U238U235 * age * e238t / pb207;
+    const dRd235 = pb206 * age * e235t / pb207sqared;
+    const errR = Math.hypot(
+        dRdt * ageErr,
+        dRd235 * options.errLambdaU235,
+        dRd238 * options.errLambdaU238
+    );
+    const errRprop = errR * pb207 / pb206;
 
     const pb206pb204 = data[0];
-    data[1] = roundd(pb206err * pb206pb204, 2);
-    const pb207pb204 = pb206pb204 * pb207 / pb206;
+    const errPb206pb204 = data[1] / pb206pb204;
+    const errPb207pb204 = Math.sqrt(errRprop * errRprop - errPb206pb204 * errPb206pb204);
+    const pb207pb204 = pb207 * pb206pb204 / pb206;
     data[2] = roundd(pb207pb204, 2);
-    data[3] = roundd(pb207err * pb207pb204, 2);
+    data[3] = roundd(errPb207pb204 * pb207pb204, 2);
 }
 
 function roundd(x, n) {
