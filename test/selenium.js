@@ -7,6 +7,9 @@ const clipboardy = require("clipboardy");
 const assert = require("assert");
 const { PNG } = require("pngjs");
 const floor = Math.floor;
+const ErrorPropagation = require('na-error-propagation');
+const nerdamer = require('nerdamer');
+ErrorPropagation.nerdamer = nerdamer;
 
 describe('IsoplotRgui', function() {
     let rProcess;
@@ -220,20 +223,39 @@ describe('IsoplotRgui', function() {
 // data[0] must already be set as ratio of 206Pb to 204Pb and
 // data[1] to the error thereof.
 // options needs the following fields set:
-// * LambdaU238 and errLambdaU238: decay constant of 238U
-// * LambdaU235 and errLambdaU235: decay constant of 235U
-// * U238U235 and errU238U235: initial ratio of 238U to 235U.
+// * LambdaU238 and errLambdaU238: decay constant of 238U (λ238)
+// * LambdaU235 and errLambdaU235: decay constant of 235U (λ235)
+// * U238U235 and errU238U235: current ratio of 238U to 235U.
 // result.bottom to result.top is the size of the bar we want output.
 function weightedMeanPbPbUpdateTestData(data, result, options) {
+    // pb206 and pb207 denote current, measured abundance of those
+    // isotopes of lead, we will assume the initial abundances are zero.
+    // Let us call the initial abundances of Uranium u235 and u238, and
+    // the elapsed time t.
+    // Then pb206 = u238 * (1 - exp(-λ238 * t))
+    // and pb207 = u235 * (1 - exp(-λ235 * t))
+    // also U238U235 = u238 *  exp(-λ238 * t) / [u235 * exp(-λ235 * t)]
+    // so u238 = pb206 / (1 - exp(-λ238 * t))
+    // and u235 = pb207 / (1 - exp(-λ235 * t))
+    // (and given that exp(-x)/(1-exp(-x))
+    //  = exp(x)exp(-x)/(exp(x)-exp(x)exp(-x))
+    //  = 1/(exp(x) - 1))
+    // so, removing u235 and u238 (which we don't know)
+    // U238U235 = pb206 / (1 - exp(-λ238 * t)) * exp(-λ238 * t)
+    //      / [pb207 / (1 - exp(-λ235 * t)) * exp(-λ235 * t)]
+    //   = pb206 / (exp(λ238 * t) - 1)
+    //      / [pb207 / (exp(λ235 * t) - 1)]
+    //   = pb206/pb207 * [exp(λ235 * t) - 1]/[exp(λ238 * t) - 1]
+    // let R = pb206/pb207 = U238U235 * [exp(λ238 * t) - 1]/[exp(λ235 * t) - 1]
+    // so:
     // let e238t = exp(λ238 * t)
     // let pb206growth = e238t - 1
     // let pb206 = U238235 * pb206growth
     // let e235t = exp(λ235*t)
     // let pb207 = e235t - 1
-    // let R = pb206/pb207
-    // then dR/dt = U238U235 * (pb206growth * λ238 * e235t - pb207 * λ238 * e238t) / pb207^2
-    // dR/dλ238 = -t * e238t / pb207
-    // dR/dλ235 = pb206growth * t * e238t / pb207^2
+    // then dR/dt = U238U235 * (pb207 * λ238 * e238t - pb206growth * λ235 * e235t) / pb207^2
+    // dR/dλ238 = U238U235 * t * e238t / pb207
+    // dR/dλ235 = -pb206 * t * e235t / pb207^2
     // assuming that errors δλ238, δλ238 and δt are independent (not
     // necessarily a safe assumption):
     // δR = sqrt((δλ238*dR/dλ238)^2 + (δλ235*dR/dλ235)^2 + (δt*dR/dt)^2)
@@ -249,11 +271,11 @@ function weightedMeanPbPbUpdateTestData(data, result, options) {
     const pb207sqared = Math.pow(pb207, 2);
 
     const dRdt = U238U235 * (
-        pb206growth * LambdaU235 * e235t
-        - pb207 * LambdaU238 * e238t
+        pb207 * LambdaU238 * e238t
+        - pb206growth * LambdaU235 * e235t
         ) / pb207sqared;
-    const dRd238 = -U238U235 * age * e238t / pb207;
-    const dRd235 = pb206 * age * e235t / pb207sqared;
+    const dRd238 = U238U235 * age * e238t / pb207;
+    const dRd235 = -pb206 * age * e235t / pb207sqared;
     const errR = Math.hypot(
         dRdt * ageErr,
         dRd235 * options.errLambdaU235,
