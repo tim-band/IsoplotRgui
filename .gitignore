@@ -27,3 +27,6 @@
 # build products
 /build/unihan.txt
 /build/unihan.zip
+
+# Vagrant products
+/.vagrant/

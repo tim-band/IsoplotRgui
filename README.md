@@ -41,7 +41,7 @@ or from your own server as discussed in the next section.
 
 ## Setting up your own online mirror
 
-There are three ways to install **IsoplotR** online:
+There are four ways to install **IsoplotR** online:
 
 1. The current stable version is available from [CRAN](build/CRAN.md).
 
@@ -49,6 +49,8 @@ There are three ways to install **IsoplotR** online:
 [docker](build/docker.md) container.
 
 3. The development version is available from [GitHub](build/git.md).
+
+4. An experimental [Vagrant](build/vagrant.md) version to run it in a VM.
 
 
 Click on the links for further instructions.
