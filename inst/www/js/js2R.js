@@ -1,438 +1,521 @@
+function stringify(v) {
+    if (typeof(v) === 'string') {
+        return '"' + v + '"';
+    } else if (v === null) {
+        return "NULL";
+    } else if (typeof(v) === 'object') {
+        if ('toR' in v) {
+            return v.toR();
+        }
+        var out = 'c(';
+        var sep = '';
+        for (var i in v) {
+            out += sep + stringify(v[i]);
+            sep = ',';
+        }
+        return out + ')';
+    } else if (typeof(v) === 'boolean') {
+        return v? 'TRUE' : 'FALSE';
+    } else {
+        return String(v);
+    }
+}
+
+function makeSettings() {
+    var out = "";
+    return {
+        result: function() { return out; },
+        add: function(kvs) {
+            for (var k in kvs) {
+                out += "," + k + "=" + stringify(kvs[k]);
+            }
+        },
+        addRaw: function(kvs) {
+            for (var k in kvs) {
+                out += "," + k + "=" + kvs[k];
+            }
+        },
+        addIfNot(forbiddenValue, kvs) {
+            for (var k in kvs) {
+                const v = kvs[k];
+                if (v !== forbiddenValue) {
+                    out += "," + k + "=" + stringify(v);
+                }
+            }
+        }
+    }
+}
+
 // turns the options into a string to feed into R
 function getOptions(prefs){
-    var out = "";
+    const NA = {
+        toR: function() { return 'NA'; }
+    };
+    var out = makeSettings();
     var geochronometer = prefs.settings.geochronometer;
     var plotdevice = prefs.settings.plotdevice;
     var pdsettings = prefs.settings[plotdevice];
     var gcsettings = prefs.settings[geochronometer];
     switch (plotdevice){
     case 'concordia':
-	var mint = check(pdsettings.mint,null);
-	var maxt = check(pdsettings.maxt,null);
-	if (mint != null | maxt != null){
-	    out += ",tlim=c(";
-	    if (mint == null){ out += "0"; } else { out += mint; }
-	    if (maxt == null){ out += ",4500)"; } else { out += "," + maxt + ")"; }
-	} else {
-	    out += ",tlim=NULL"
-	}
-	if (pdsettings.minx != 'auto' & pdsettings.maxx != 'auto'){
-	    out += ",xlim=c(" + pdsettings.minx + "," + pdsettings.maxx + ")";
-	}
-	if (pdsettings.miny != 'auto' & pdsettings.maxy != 'auto'){
-	    out += ",ylim=c(" + pdsettings.miny + "," + pdsettings.maxy + ")";
-	}
-	if (pdsettings.ticks != 'auto'){
-	    out += ",ticks=c(" + pdsettings.ticks + ")";
-	}
-	out += ",alpha=" + pdsettings.alpha;
-	out += ",type=" + pdsettings.type;
-	out += ",exterr=" + pdsettings.exterr;
-	out += ",show.numbers=" + pdsettings.shownumbers;
-	out += ",show.age=" + pdsettings.showage;
-	out += ",sigdig=" + pdsettings.sigdig;
-	out += ",common.Pb=" + gcsettings.commonPb;
-	out += ",ellipse.fill=" + pdsettings.ellipsefill;
-	out += ",ellipse.stroke=" + pdsettings.ellipsestroke;
-	out += ",levels=selection2levels()";
-	out += ",omit=omitter(flags='x')";
-	out += ",hide=omitter(flags='X')";
-	out += ",clabel='" + pdsettings.clabel + "'";
-	if (pdsettings.anchor==1){
-	    out += ",anchor=1";
-	} else if (pdsettings.anchor==2){
-	    out += ",anchor=c(2," + pdsettings.tanchor + ")";
-	}
-	break;
+        var mint = check(pdsettings.mint,null);
+        var maxt = check(pdsettings.maxt,null);
+        if (mint != null | maxt != null){
+            out.add({
+                tlim: [
+                    mint === null? 0 : mint,
+                    maxt === null? 4500 : maxt
+                ]
+            });
+        } else {
+            out.add({tlim: null});
+        }
+        if (pdsettings.minx != 'auto' & pdsettings.maxx != 'auto'){
+            out.add({xlim: [pdsettings.minx, pdsettings.maxx]});
+        }
+        if (pdsettings.miny != 'auto' & pdsettings.maxy != 'auto'){
+            out.add({ylim: [pdsettings.miny, pdsettings.maxy]});
+        }
+        if (pdsettings.ticks != 'auto'){
+            out.add({ticks: [pdsettings.ticks]});
+        }
+        out.add({
+            alpha: pdsettings.alpha,
+            type: pdsettings.type,
+            exterr: pdsettings.exterr,
+            'show.numbers': pdsettings.shownumbers,
+            'show.age': pdsettings.showage,
+            sigdig: pdsettings.sigdig,
+            'common.Pb': gcsettings.commonPb,
+            clabel: pdsettings.clabel,
+        });
+        out.addRaw({
+            'ellipse.fill': pdsettings.ellipsefill,
+            'ellipse.stroke': pdsettings.ellipsestroke,
+            levels: "selection2levels()",
+            omit: "omitter(flags='x')",
+            hide: "omitter(flags='X')"
+        });
+        if (pdsettings.anchor==1){
+            out.add({ anchor: 1 });
+        } else if (pdsettings.anchor==2){
+            out.add({ anchor: [2, pdsettings.tanchor] });
+        }
+        break;
     case 'radial':
-	out += ",transformation='" + pdsettings.transformation + "'";
-	out += ",levels=selection2levels()";
-	out += ",omit=omitter(flags='x')";
-	out += ",hide=omitter(flags='X')";
-	if (pdsettings.numpeaks == 'auto'){ out += ",k='auto'" }
-	else if (pdsettings.numpeaks == 'min'){ out += ",k='min'" }
-	else { out += ",k=" + pdsettings.numpeaks ; }
-	if (pdsettings.mint != 'auto'){ out += ",from=" + pdsettings.mint; }
-	if (pdsettings.z0 != 'auto'){ out += ",z0=" + pdsettings.z0; }
-	if (pdsettings.maxt != 'auto'){ out += ",to=" + pdsettings.maxt; }
-	out += ",pch=" + pdsettings.pch;
-	out += ",cex=" + pdsettings.cex;
-	out += ",bg=" + pdsettings.bg;
-	out += ",alpha=" + pdsettings.alpha;
-	out += ",sigdig=" + pdsettings.sigdig;
-	out += ",show.numbers=" + pdsettings.shownumbers;
-	out += ",clabel='" + pdsettings.clabel + "'";
-	if (geochronometer != "other" &
-	    geochronometer != "Th-U" &
-	    geochronometer != 'U-Th-He'){
-	    out += ",exterr=" + pdsettings.exterr;
-	}
-	switch (geochronometer){
-	case 'Th-U':
-	    out += ",detritus=" + gcsettings.detritus;
-	case 'Ar-Ar':
-	case 'Th-Pb':
-	case 'K-Ca':
-	case 'Rb-Sr':
-	case 'Sm-Nd':
-	case 'Re-Os':
-	case 'Lu-Hf':
-	    out += ",i2i=" + gcsettings.i2i;
-	    break;
-	case 'U-Pb':
-	    var type = gcsettings.type;
-	    out += ",type=" + type;
-	    if (type==4){
-		out += ",cutoff.76=" + gcsettings.cutoff76;
-	    }
-	    if (gcsettings.cutoffdisc!=0){
-		var opt = gcsettings.discoption;
-		out += ",cutoff.disc=IsoplotR::discfilter(" +
-		    "option=" + opt + "," +
-		    "cutoff=c(" + gcsettings.mindisc[opt-1] +
-		    "," + gcsettings.maxdisc[opt-1] + "),";
-		if (gcsettings.cutoffdisc==1){
-		    out += "before=TRUE)";
-		} else {
-		    out += "before=FALSE)";
-		}
-	    }
-	case 'Pb-Pb':
-	    out += ",common.Pb=" + gcsettings.commonPb;
-	default:
-	}
-	break;
+        out.add({ transformation: pdsettings.transformation });
+        out.addRaw({
+            levels: "selection2levels()",
+            omit: "omitter(flags='x')",
+            hide: "omitter(flags='X')",
+        });
+        if (pdsettings.numpeaks == 'auto'){ out.add({ k: "auto" }); }
+        else if (pdsettings.numpeaks == 'min'){ out.add({ k: "min'" }); }
+        else { out.add({ k: pdsettings.numpeaks }); }
+        out.addIfNot('auto', {
+            from: pdsettings.mint,
+            z0: pdsettings.z0,
+            to: pdsettings.maxt
+        });
+        out.add({
+            pch: pdsettings.pch,
+            cex: pdsettings.cex,
+            alpha: pdsettings.alpha,
+            sigdig: pdsettings.sigdig,
+            'show.numbers': pdsettings.shownumbers,
+            clabel: pdsettings.clabel
+        });
+        out.addRaw({
+            bg: pdsettings.bg,
+        });
+        if (geochronometer != "other" &&
+            geochronometer != "Th-U" &&
+            geochronometer != 'U-Th-He'){
+            out.add({ exterr: pdsettings.exterr });
+        }
+        switch (geochronometer){
+        case 'Th-U':
+            out.add({ detritus: gcsettings.detritus });
+        case 'Ar-Ar':
+        case 'Th-Pb':
+        case 'K-Ca':
+        case 'Rb-Sr':
+        case 'Sm-Nd':
+        case 'Re-Os':
+        case 'Lu-Hf':
+            out.add({ "i2i": gcsettings.i2i });
+            break;
+        case 'U-Pb':
+            var type = gcsettings.type;
+            out.add({ type: type });
+            if (type==4){
+                out.add({ "cutoff.76": gcsettings.cutoff76 });
+            }
+            if (gcsettings.cutoffdisc!=0){
+                var opt = gcsettings.discoption;
+                out.addRaw({
+                    "cutoff.disc": "IsoplotR::discfilter(" +
+                        "option=" + opt + "," +
+                        "cutoff=c(" + gcsettings.mindisc[opt-1] +
+                        "," + gcsettings.maxdisc[opt-1] + "),",
+                });
+                out.add({ before: gcsettings.cutoffdisc==1 });
+            }
+        case 'Pb-Pb':
+            out.add({ "common.Pb": gcsettings.commonPb });
+        default:
+        }
+        break;
     case 'evolution':
-	var transform = (pdsettings.transform=='TRUE');
-	if (transform & pdsettings.mint != 'auto' & pdsettings.maxt != 'auto'){
-	    out += ",xlim=c(" + pdsettings.mint + "," + pdsettings.maxt + ")";
-	}
-	if (!transform & pdsettings.min08 != 'auto' & pdsettings.max08 != 'auto'){
-	    out += ",xlim=c(" + pdsettings.min08 + "," + pdsettings.max08 + ")";
-	}
-	if (pdsettings.min48 != 'auto' & pdsettings.max48 != 'auto'){
-	    out += ",ylim=c(" + pdsettings.min48 + "," + pdsettings.max48 + ")";
-	}
-	out += ",alpha=" + pdsettings.alpha;
-	out += ",show.numbers=" + pdsettings.shownumbers;
-	out += ",sigdig=" + pdsettings.sigdig;
-	out += ",transform=" + pdsettings.transform;
-	out += ",detritus=" + gcsettings.detritus;
-	out += ",exterr=" + pdsettings.exterr;
-	out += ",isochron=" + pdsettings.isochron;
-	out += ",levels=selection2levels()";
-	out += ",omit=omitter(flags='x')";
-	out += ",hide=omitter(flags='X')";
-	out += ",ellipse.fill=" + pdsettings.ellipsefill;
-	out += ",ellipse.stroke=" + pdsettings.ellipsestroke;
-	out += ",model=" + pdsettings.model;
-	out += ",clabel='" + pdsettings.clabel + "'";
-	break;
+        var transform = (pdsettings.transform=='TRUE');
+        if (transform & pdsettings.mint != 'auto' & pdsettings.maxt != 'auto'){
+            out.add({ xlim: [pdsettings.mint, pdsettings.maxt] });
+        }
+        if (!transform & pdsettings.min08 != 'auto' & pdsettings.max08 != 'auto'){
+            out.add({ xlim: [pdsettings.min08, pdsettings.max08] });
+        }
+        if (pdsettings.min48 != 'auto' & pdsettings.max48 != 'auto'){
+            out.add({ ylim: [pdsettings.min48, pdsettings.max48] });
+        }
+        out.add({
+            alpha: pdsettings.alpha,
+            "show.numbers": pdsettings.shownumbers,
+            sigdig: pdsettings.sigdig,
+            transform: pdsettings.transform,
+            detritus: gcsettings.detritus,
+            exterr: pdsettings.exterr,
+            isochron: pdsettings.isochron,
+            model: pdsettings.model,
+            clabel: pdsettings.clabel
+        });
+        out.addRaw({
+            levels: "selection2levels()",
+            omit: "omitter(flags='x')",
+            hide: "omitter(flags='X')",
+            "ellipse.fill": pdsettings.ellipsefill,
+            "ellipse.stroke": pdsettings.ellipsestroke,
+        });
+        break;
     case 'isochron':
-	if (geochronometer!='U-Pb' & geochronometer!='Th-U' &
-	    geochronometer!='U-Th-He'){ out += ",inverse=" + gcsettings.inverse; }
-	if (geochronometer=='Pb-Pb'){ out += ",growth=" + pdsettings.growth; }
-	if (geochronometer=='U-Pb'){
-	    out += ",type=" + pdsettings.UPbtype;
-	    if (gcsettings.format>3){
-		out += ",joint=" + pdsettings.joint;
-	    }
-	    if (pdsettings.anchor==1){
-		out += ",anchor=1";
-	    } else if (pdsettings.anchor==2){
-		out += ",anchor=c(2," + pdsettings.tanchor + ")";
-	    }
-	}
-	if (geochronometer=='Th-U'){ out += ",type=" + pdsettings.ThUtype; }
-	if (geochronometer!='U-Th-He'){ out += ",exterr=" + pdsettings.exterr; }
+        if (geochronometer!='U-Pb' & geochronometer!='Th-U' &
+            geochronometer!='U-Th-He'){ out.add({ inverse: gcsettings.inverse }); }
+        if (geochronometer=='Pb-Pb'){ out.add({ growth: pdsettings.growth }); }
+        if (geochronometer=='U-Pb'){
+            out.add({ type: pdsettings.UPbtype });
+            if (gcsettings.format>3){
+                out.add({ joint: pdsettings.joint });
+            }
+            if (pdsettings.anchor==1){
+                out.add({ anchor: 1 });
+            } else if (pdsettings.anchor==2){
+                out.add({ anchor: [2, pdsettings.tanchor] });
+            }
+        }
+        if (geochronometer=='Th-U'){ out.add({ type: pdsettings.ThUtype }); }
+        if (geochronometer!='U-Th-He'){ out.add({ exterr: pdsettings.exterr }); }
     case 'regression':
-	if (pdsettings.minx != 'auto' & pdsettings.maxx != 'auto'){
-	    out += ",xlim=c(" + pdsettings.minx + "," + pdsettings.maxx + ")";
-	}
-	if (pdsettings.miny != 'auto' & pdsettings.maxy != 'auto'){
-	    out += ",ylim=c(" + pdsettings.miny + "," + pdsettings.maxy + ")";
-	}
-	out += ",alpha=" + pdsettings.alpha;
-	out += ",show.numbers=" + pdsettings.shownumbers;
-	out += ",sigdig=" + pdsettings.sigdig;
-	out += ",model=" + pdsettings.model;
-	out += ",clabel='" + pdsettings.clabel + "'";
-    out += ",levels=selection2levels()";
-    out += ",omit=omitter(flags='x')";
-    out += ",hide=omitter(flags='X')";
-	out += ",ellipse.fill=" + pdsettings.ellipsefill;
-	out += ",ellipse.stroke=" + pdsettings.ellipsestroke;
-	break;
+        if (pdsettings.minx != 'auto' & pdsettings.maxx != 'auto'){
+            out.add({ xlim: [pdsettings.minx, pdsettings.maxx] });
+        }
+        if (pdsettings.miny != 'auto' & pdsettings.maxy != 'auto'){
+            out.add({ ylim: [pdsettings.miny, pdsettings.maxy] });
+        }
+        out.add({
+            alpha: pdsettings.alpha,
+            "show.numbers": pdsettings.shownumbers,
+            sigdig: pdsettings.sigdig,
+            model: pdsettings.model,
+            clabel: pdsettings.clabel,
+        });
+        out.addRaw({
+            "ellipse.fill": pdsettings.ellipsefill,
+            "ellipse.stroke": pdsettings.ellipsestroke,
+            levels: "selection2levels()",
+            omit: "omitter(flags='x')",
+            hide: "omitter(flags='X')"
+        });
+        break;
     case 'average':
-	switch (geochronometer){
-	case 'Th-U':
-	    out += ",detritus=" + gcsettings.detritus;
-	case 'Ar-Ar':
-	case 'Th-Pb':
-	case 'K-Ca':
-	case 'Rb-Sr':
-	case 'Sm-Nd':
-	case 'Re-Os':
-	case 'Lu-Hf':
-	    out += ",i2i=" + gcsettings.i2i;
-	    break;
-	case 'U-Pb':
-	    var type = gcsettings.type;
-	    out += ",type=" + type;
-	    if (type==4){
-		out += ",cutoff.76=" + gcsettings.cutoff76;
-	    }
-	    if (gcsettings.cutoffdisc!=0){
-		var opt = gcsettings.discoption;
-		out += ",cutoff.disc=IsoplotR::discfilter(" +
-		    "option=" + opt + "," +
-		    "cutoff=c(" + gcsettings.mindisc[opt-1] +
-		    "," + gcsettings.maxdisc[opt-1] + "),";
-		if (gcsettings.cutoffdisc==1){
-		    out += "before=TRUE)";
-		} else {
-		    out += "before=FALSE)";
-		}
-	    }
-	case 'Pb-Pb':
-	    out += ",common.Pb=" + gcsettings.commonPb;
-	    break;
-	}
-	if (geochronometer != "other" &
-	    geochronometer != "Th-U" &
-	    geochronometer != 'U-Th-He'){
-	    out += ",exterr=" + pdsettings.exterr;
-	}
-	out += ",detect.outliers=" + pdsettings.outliers;
-	out += ",alpha=" + pdsettings.alpha;
-	out += ",sigdig=" + pdsettings.sigdig;
-	out += ",random.effects=" + pdsettings.randomeffects;
-	out += ",ranked=" + pdsettings.ranked;
-	out += ",levels=selection2levels()";
-	out += ",rect.col=" + pdsettings.rectcol;
-	out += ",outlier.col=" + pdsettings.outliercol;
-	out += ",clabel='" + pdsettings.clabel + "'";
-	if (pdsettings.mint != 'auto'){ out += ",from=" + pdsettings.mint; }
-	if (pdsettings.maxt != 'auto'){ out += ",to=" + pdsettings.maxt; }
-    out += ",omit=omitter(flags='x')";
-    out += ",hide=omitter(flags='X')";
-	break;
+        switch (geochronometer){
+        case 'Th-U':
+            out.add({ detritus: gcsettings.detritus });
+        case 'Ar-Ar':
+        case 'Th-Pb':
+        case 'K-Ca':
+        case 'Rb-Sr':
+        case 'Sm-Nd':
+        case 'Re-Os':
+        case 'Lu-Hf':
+            out.add({ "i2i": gcsettings.i2i });
+            break;
+        case 'U-Pb':
+            var type = gcsettings.type;
+            out.add({ type: type });
+            if (type==4){
+                out.add({ "cutoff.76": gcsettings.cutoff76 });
+            }
+            if (gcsettings.cutoffdisc!=0){
+                var opt = gcsettings.discoption;
+                out.addRaw({ "cutoff.disc": "IsoplotR::discfilter(" +
+                    "option=" + opt + "," +
+                    "cutoff=c(" + gcsettings.mindisc[opt-1] +
+                    "," + gcsettings.maxdisc[opt-1] + "),"
+                });
+                out.add({ before: gcsettings.cutoffdisc==1 });
+            }
+        case 'Pb-Pb':
+            out.add({ "common.Pb": gcsettings.commonPb });
+            break;
+        }
+        if (geochronometer != "other" &
+            geochronometer != "Th-U" &
+            geochronometer != 'U-Th-He'){
+            out.add({ exterr: pdsettings.exterr });
+        }
+    out.add({
+            "detect.outliers": pdsettings.outliers,
+            alpha: pdsettings.alpha,
+            sigdig: pdsettings.sigdig,
+            "random.effects": pdsettings.randomeffects,
+            ranked: pdsettings.ranked,
+            clabel: pdsettings.clabel
+    });
+    if (pdsettings.mint != 'auto'){ out.add({ "from": pdsettings.mint }); }
+    if (pdsettings.maxt != 'auto'){ out.add({ "to": pdsettings.maxt }); }
+        out.addRaw({
+            "rect.col": pdsettings.rectcol,
+            "outlier.col": pdsettings.outliercol,
+            levels: "selection2levels()",
+            omit: "omitter(flags='x')",
+            hide: "omitter(flags='X')"
+        });
+        break;
     case 'spectrum':
-	if (geochronometer=='Ar-Ar'){
-	    out += ",i2i=" + gcsettings.i2i;
-	    out += ",exterr=" + pdsettings.exterr;
-	}
-	out += ",plateau=" + pdsettings.plateau;
-	out += ",random.effects=" + pdsettings.randomeffects;
-	out += ",alpha=" + pdsettings.alpha;
-	out += ",sigdig=" + pdsettings.sigdig;
-	out += ",levels=selection2levels()";
-	out += ",plateau.col=" + pdsettings.plateaucol;	
-	out += ",non.plateau.col=" + pdsettings.nonplateaucol;
-	out += ",clabel='" + pdsettings.clabel + "'";
-    out += ",omit=omitter(flags='x')";
-    out += ",hide=omitter(flags='X')";
-	break;
+        if (geochronometer=='Ar-Ar'){
+            out.add({
+                i2i: gcsettings.i2i,
+                exterr: pdsettings.exterr
+            });
+        }
+        out.add({
+            plateau: pdsettings.plateau,
+            "random.effects": pdsettings.randomeffects,
+            alpha: pdsettings.alpha,
+            sigdig: pdsettings.sigdig,
+            clabel: pdsettings.clabel
+        });
+        out.addRaw({
+            "plateau.col": pdsettings.plateaucol,
+            "non.plateau.col": pdsettings.nonplateaucol,
+            levels: "selection2levels()",
+            omit: "omitter(flags='x')",
+            hide: "omitter(flags='X')"
+        });
+        break;
     case 'KDE':
-	if (pdsettings.minx != 'auto'){ out += ",from=" + pdsettings.minx; }
-	else { out += ",from=NA"; }
-	if (pdsettings.maxx != 'auto'){ out += ",to=" + pdsettings.maxx; }
-	else { out += ",to=NA"; }
-	if (pdsettings.bandwidth != 'auto'){ out += ",bw=" + pdsettings.bandwidth; }
-	else { out += ",bw=NA"; }
-	out += ",show.hist=" + pdsettings.showhist;
-	out += ",adaptive=" + pdsettings.adaptive;
-	switch (geochronometer){
-	case 'Th-U':
-	    out += ",detritus=" + gcsettings.detritus;
-	case 'Ar-Ar':
-	case 'Th-Pb':
-	case 'K-Ca':
-	case 'Rb-Sr':
-	case 'Sm-Nd':
-	case 'Re-Os':
-	case 'Lu-Hf':
-	    out += ",i2i=" + gcsettings.i2i;
-	    break;
-	case 'U-Pb':
-	    var type = gcsettings.type;
-	    out += ",type=" + type;
-	    if (type==4){
-		out += ",cutoff.76=" + gcsettings.cutoff76;
-	    }
-	    if (gcsettings.cutoffdisc!=0){
-		var opt = gcsettings.discoption;
-		out += ",cutoff.disc=IsoplotR::discfilter(" +
-		    "option=" + opt + "," +
-		    "cutoff=c(" + gcsettings.mindisc[opt-1] +
-		    "," + gcsettings.maxdisc[opt-1] + "),";
-		if (gcsettings.cutoffdisc==1){
-		    out += "before=TRUE)";
-		} else {
-		    out += "before=FALSE)";
-		}
-	    }
-	case 'Pb-Pb':
-	    out += ",common.Pb=" + gcsettings.commonPb;
-	    break;
-	case 'detritals':
-	    out += ",samebandwidth=" + pdsettings.samebandwidth;
-	    out += ",normalise=" + pdsettings.normalise;
-	    break;
-	default:
-	}
-	if (geochronometer=="detritals"){
-	    out += ",rug=" + pdsettings.rugdetritals;
-	} else {
-	    out += ",rug=" + pdsettings.rug;
-	}
-	out += ",log=" + pdsettings.log;
-	if (pdsettings.binwidth != 'auto'){
-	    out += ",binwidth=" + pdsettings.binwidth;
-	} else {
-	    out += ",binwidth=NA";
-	}
-	if (geochronometer=='detritals'){
-	    out += ",hide=c(" + gcsettings.hide + ')';
-	} else {
-	    out += ",hide=omitter(flags=c('x','X'))";
-	}
-	break;
+        out.add({
+            "from": pdsettings.minx === 'auto'? NA : pdsettings.minx,
+            "to": pdsettings.maxx === 'auto'? NA : pdsettings.maxx,
+            "bw": pdsettings.bandwidth === 'auto'? NA : pdsettings.bandwidth,
+            "show.hist": pdsettings.showhist,
+            adaptive: pdsettings.adaptive
+        });
+        switch (geochronometer){
+        case 'Th-U':
+            out.add({ detritus: gcsettings.detritus });
+        case 'Ar-Ar':
+        case 'Th-Pb':
+        case 'K-Ca':
+        case 'Rb-Sr':
+        case 'Sm-Nd':
+        case 'Re-Os':
+        case 'Lu-Hf':
+            out.add({ i2i: gcsettings.i2i });
+            break;
+        case 'U-Pb':
+            var type = gcsettings.type;
+            out.add({ type: type });
+            if (type==4){
+                out.add({ "cutoff.76": gcsettings.cutoff76 });
+            }
+            if (gcsettings.cutoffdisc!=0){
+                var opt = gcsettings.discoption;
+                out.addRaw({ "cutoff.disc": "IsoplotR::discfilter(" +
+                    "option=" + opt + "," +
+                    "cutoff=c(" + gcsettings.mindisc[opt-1] +
+                    "," + gcsettings.maxdisc[opt-1] + "),"
+        });
+        out.add({ before: gcsettings.cutoffdisc==1 });
+            }
+        case 'Pb-Pb':
+            out.add({ "common.Pb": gcsettings.commonPb });
+            break;
+        case 'detritals':
+            out.add({
+                samebandwidth: pdsettings.samebandwidth,
+                normalise: pdsettings.normalise
+            });
+            break;
+        default:
+        }
+        out.add({
+            rug: geochronometer=="detritals"? pdsettings.rugdetritals : pdsettings.rug,
+            log: pdsettings.log
+        });
+        out.add({ binwidth: pdsettings.binwidth === 'auto'? NA : pdsettings.binwidth });
+        if (geochronometer=='detritals'){
+            out.add({ hide: gcsettings.hide });
+        } else {
+            out.addRaw({ hide: "omitter(flags=c('x','X'))" });
+        }
+        break;
     case 'CAD':
-	if (pdsettings.pch!='none'){ out += ",pch=" + pdsettings.pch; }
-	out += ",verticals=" + pdsettings.verticals;
-	switch (geochronometer){
-	case 'Th-U':
-	    out += ",detritus=" + gcsettings.detritus;
-	case 'Ar-Ar':
-	case 'Th-Pb':
-	case 'K-Ca':
-	case 'Rb-Sr':
-	case 'Sm-Nd':
-	case 'Re-Os':
-	case 'Lu-Hf':
-	    out += ",i2i=" + gcsettings.i2i;
-	    break;
-	case 'U-Pb':
-	    var type = gcsettings.type;
-	    out += ",type=" + type;
-	    if (type==4){
-		out += ",cutoff.76=" + gcsettings.cutoff76;
-	    }
-	    if (gcsettings.cutoffdisc!=0){
-		var opt = gcsettings.discoption;
-		out += ",cutoff.disc=IsoplotR::discfilter(" +
-		    "option=" + opt + "," +
-		    "cutoff=c(" + gcsettings.mindisc[opt-1] +
-		    "," + gcsettings.maxdisc[opt-1] + "),";
-		if (gcsettings.cutoffdisc==1){
-		    out += "before=TRUE)";
-		} else {
-		    out += "before=FALSE)";
-		}
-	    }
-	case 'Pb-Pb':
-	    out += ",common.Pb=" + gcsettings.commonPb;
-	    break;
-	default:
-	}
-	if (geochronometer=='detritals'){
-	    out += ",col='" + pdsettings.colmap + "'";
-	    out += ",hide=c(" + gcsettings.hide + ')';
-	} else {
-	    out += ",hide=omitter(flags=c('x','X'))";
-	}
-	break;
+        if (pdsettings.pch!='none'){ out.add({ pch: pdsettings.pch }); }
+        out.add({ verticals: pdsettings.verticals });
+        switch (geochronometer){
+        case 'Th-U':
+            out.add({ detritus: gcsettings.detritus });
+        case 'Ar-Ar':
+        case 'Th-Pb':
+        case 'K-Ca':
+        case 'Rb-Sr':
+        case 'Sm-Nd':
+        case 'Re-Os':
+        case 'Lu-Hf':
+            out.add({ i2i: gcsettings.i2i });
+            break;
+        case 'U-Pb':
+            var type = gcsettings.type;
+            out.add({ type: type });
+            if (type==4){
+                out.add({ "cutoff.76": gcsettings.cutoff76 });
+            }
+            if (gcsettings.cutoffdisc!=0){
+                var opt = gcsettings.discoption;
+                out.addRaw({ "cutoff.disc": "IsoplotR::discfilter(" +
+                    "option=" + opt + "," +
+                    "cutoff=c(" + gcsettings.mindisc[opt-1] +
+                    "," + gcsettings.maxdisc[opt-1] + "),"
+        });
+        out.add({before: gcsettings.cutoffdisc==1 });
+            }
+        case 'Pb-Pb':
+            out.add({ "common.Pb": gcsettings.commonPb });
+            break;
+        default:
+        }
+        if (geochronometer=='detritals'){
+            out.add({
+            col: pdsettings.colmap,
+                hide: gcsettings.hide
+        });
+        } else {
+            out.addRaw({ hide: "omitter(flags=c('x','X'))" });
+        }
+        break;
     case 'set-zeta':
-	var data = prefs.data.fissiontracks;
-	out += ",tst=c(" + data.age[0] +
-	             "," + data.age[1] + ")";
-	out += ",exterr=" + pdsettings.exterr;
-	out += ",sigdig=" + pdsettings.sigdig;
-	out += ",update=FALSE";
-	break;
+        var data = prefs.data.fissiontracks;
+        out.add({
+            tst: [ data.age[0], data.age[1] ],
+            exterr: pdsettings.exterr,
+            sigdig: pdsettings.sigdig,
+            update: false
+        });
+        break;
     case 'helioplot':
-	out += ",logratio=" + pdsettings.logratio;
-	out += ",show.numbers=" + pdsettings.shownumbers;
-	out += ",show.central.comp=" + pdsettings.showcentralcomp;
-	out += ",alpha=" + pdsettings.alpha;
-	out += ",sigdig=" + pdsettings.sigdig;
-	if (pdsettings.minx != 'auto' & pdsettings.maxx != 'auto'){
-	    out += ",xlim=c(" + pdsettings.minx + "," + pdsettings.maxx + ")"
-	}
-	if (pdsettings.miny != 'auto' & pdsettings.maxy != 'auto'){
-	    out += ",ylim=c(" + pdsettings.miny + "," + pdsettings.maxy + ")"
-	}
-	if (pdsettings.fact != 'auto'){
-	    out += ",fact=" + pdsettings.fact;
-	}
-	out += ",levels=selection2levels()";
-	out += ",omit=omitter(flags='x')";
-	out += ",hide=omitter(flags='X')";
-	out += ",ellipse.fill=" + pdsettings.ellipsefill;
-	out += ",ellipse.stroke=" + pdsettings.ellipsestroke;
-	out += ",model=" + pdsettings.model;
-	out += ",clabel='" + pdsettings.clabel + "'";
-	break;
+        out.add({
+            logratio: pdsettings.logratio,
+            "show.numbers": pdsettings.shownumbers,
+            "show.central.comp": pdsettings.showcentralcomp,
+            alpha: pdsettings.alpha,
+            sigdig: pdsettings.sigdig,
+        });
+        if (pdsettings.minx != 'auto' & pdsettings.maxx != 'auto'){
+            out.add({ xlim: [ pdsettings.minx, pdsettings.maxx ] });
+        }
+        if (pdsettings.miny != 'auto' & pdsettings.maxy != 'auto'){
+            out.add({ ylim: [ pdsettings.miny, pdsettings.maxy ] });
+        }
+        if (pdsettings.fact != 'auto'){
+            out.add({ fact: pdsettings.fact });
+        }
+        out.addRaw({
+            "levels": "selection2levels()",
+            "omit": "omitter(flags='x')",
+            "hide": "omitter(flags='X')",
+            "ellipse.fill": pdsettings.ellipsefill,
+            "ellipse.stroke": pdsettings.ellipsestroke,
+        });
+        out.add({
+                model: pdsettings.model,
+                clabel: pdsettings.clabel
+        });
+        break;
     case 'MDS':
-	out += ",classical=" + pdsettings.classical;
-	out += ",shepard=" + pdsettings.shepard;
-	out += ",nnlines=" + pdsettings.nnlines;
-	if (pdsettings.pch=='none'){ out += ",pch=NA"; }
-	else { out += ",pch=" + pdsettings.pch; }
-	if (pdsettings.shepard=='FALSE'){ out += ",cex=" + pdsettings.cex; }
-	if (pdsettings.pos==1 | pdsettings.pos==2 |
-	    pdsettings.pos==3 | pdsettings.pos==4){
-	    out += ",pos=" + pdsettings.pos;
-	}
-	out += ",col='" + pdsettings.col + "'";
-	out += ",bg='" + pdsettings.bg + "'";
-	out += ",hide=c(" + gcsettings.hide + ')';
-	break;
+        out.add({
+            classical: pdsettings.classical,
+            shepard: pdsettings.shepard,
+            nnlines: pdsettings.nnlines,
+            pch: pdsettings.pch === 'none'? NA : pdsettings.pch
+        });
+        if (pdsettings.shepard=='FALSE'){ out.add({ cex: pdsettings.cex }); }
+        if (pdsettings.pos==1 | pdsettings.pos==2 |
+            pdsettings.pos==3 | pdsettings.pos==4){
+            out.add({ pos: pdsettings.pos });
+        }
+        out.add({
+            hide: gcsettings.hide,
+            col: pdsettings.col,
+            bg: pdsettings.bg,
+        });
+        break;
     case 'ages':
-	if (geochronometer == 'U-Pb' & pdsettings.showdisc!=0){
-	    out += ",discordance=IsoplotR::discfilter(option=";
-	    if (pdsettings.showdisc==1){
-		out += pdsettings.discoption;
-		out += ",before=TRUE)";
-	    } else {
-		out += pdsettings.discoption;
-		out += ",before=FALSE)";
-	    }
-	}
-	if (geochronometer != 'U-Th-He'){
-	    out += ",exterr=" + pdsettings.exterr;
-	}
-	switch (geochronometer){
-	case 'Th-U':
-	    out += ",i2i=" + gcsettings.i2i;
-	    out += ",isochron=FALSE";
-	    out += ",detritus=" + gcsettings.detritus;
-	    break;
-	case 'Th-Pb':
-	case 'K-Ca':
-	case 'Rb-Sr':
-	case 'Sm-Nd':
-	case 'Re-Os':
-	case 'Lu-Hf':
-	case 'Ar-Ar':
-	    out += ",i2i=" + gcsettings.i2i;
-	    out += ",isochron=FALSE";
-	    out += ",projerr=" + gcsettings.projerr;
-	    break;
-	case 'Pb-Pb':
-	    out += ",projerr=" + gcsettings.projerr;
-	    out += ",isochron=FALSE";
-	case 'U-Pb':
-	    out += ",common.Pb=" + gcsettings.commonPb;
-	    break;
-	default:
-	}
-	out += ",sigdig=" + pdsettings.sigdig;
-	break;
+        if (geochronometer == 'U-Pb' & pdsettings.showdisc!=0){
+            out.addRaw({
+                discordance: "IsoplotR::discfilter(option=" +
+                pdsettings.discoption + ",before=" +
+                pdsettings.showdisc === 1? "TRUE)" : "FALSE)"
+            });
+        }
+        if (geochronometer != 'U-Th-He'){
+            out.add({ exterr: pdsettings.exterr });
+        }
+        switch (geochronometer){
+        case 'Th-U':
+            out.add({
+                i2i: gcsettings.i2i,
+                isochron: false,
+                detritus: gcsettings.detritus
+            });
+            break;
+        case 'Th-Pb':
+        case 'K-Ca':
+        case 'Rb-Sr':
+        case 'Sm-Nd':
+        case 'Re-Os':
+        case 'Lu-Hf':
+        case 'Ar-Ar':
+        out.add({
+            i2i: gcsettings.i2i,
+            isochron: false,
+            projerr: gcsettings.projerr
+        });
+            break;
+        case 'Pb-Pb':
+        out.add({
+            isochron: false,
+            projerr: gcsettings.projerr
+        });
+        case 'U-Pb':
+            out.add({ "common.Pb": gcsettings.commonPb });
+            break;
+        default:
+        }
+        out.add({ sigdig: pdsettings.sigdig });
+        break;
     default: // do nothing
     }
-    return out;
+    return out.result();
 }
 
 function concatenate(vector){
@@ -448,6 +531,7 @@ function getRcommand(prefs){
     var geochronometer = prefs.settings.geochronometer;
     var plotdevice = prefs.settings.plotdevice;
     var options = getOptions(prefs);
+    console.log(options);
     var gcsettings = prefs.settings[geochronometer];
     var out = "dat <- selection2data(input, method='" + geochronometer + "'";
     if (geochronometer=='detritals' |
