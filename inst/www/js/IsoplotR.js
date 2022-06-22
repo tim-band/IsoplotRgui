@@ -1636,7 +1636,7 @@ $(function(){
 	    pdsettings.maxt = check($('#maxt').val(),'auto');
 	    pdsettings.alpha = getNumber('#alpha');
 	    pdsettings.sigdig = getInt('#sigdig');
-	    pdsettings.pch = $('#pch').val();
+	    pdsettings.pch = getInt('#pch');
 	    pdsettings.bg = $('#bg').val();
 	    pdsettings.clabel = $('#clabel').val();
 	    pdsettings["cex"] = getNumber('#pcex');
@@ -1687,7 +1687,7 @@ $(function(){
 	    i2i(geochronometer);
 	    break;
 	case 'CAD':
-	    pdsettings["pch"] = $('#pch').val();
+	    pdsettings["pch"] = getInt('#pch');
 	    pdsettings["colmap"] = $('#colmap').val();
 	    pdsettings["verticals"] = truefalse('#verticals');
 	    IsoplotR.settings.par.cex = getNumber('#cex');
@@ -1705,7 +1705,7 @@ $(function(){
 	    pdsettings["classical"] = truefalse('#classical');
 	    pdsettings["shepard"] = truefalse('#shepard');
 	    pdsettings["nnlines"] = truefalse('#nnlines');
-	    pdsettings["pch"] = $('#pch').val();
+	    pdsettings["pch"] = getInt('#pch');
 	    pdsettings["pos"] = getInt('#pos');
 	    pdsettings["col"] = $('#col').val();
 	    pdsettings["bg"] = $('#bg').val();

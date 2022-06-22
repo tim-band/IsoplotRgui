@@ -123,9 +123,7 @@ function getOptions(prefs){
             alpha: pdsettings.alpha,
             sigdig: pdsettings.sigdig,
             'show.numbers': pdsettings.shownumbers,
-            clabel: pdsettings.clabel
-        });
-        out.addRaw({
+            clabel: pdsettings.clabel,
             bg: pdsettings.bg,
         });
         if (geochronometer != "other" &&
@@ -157,9 +155,9 @@ function getOptions(prefs){
                     "cutoff.disc": "IsoplotR::discfilter(" +
                         "option=" + opt + "," +
                         "cutoff=c(" + gcsettings.mindisc[opt-1] +
-                        "," + gcsettings.maxdisc[opt-1] + "),",
+                        "," + gcsettings.maxdisc[opt-1] +
+                        "),before=" + stringify(gcsettings.cutoffdisc==1) +  ")",
                 });
-                out.add({ before: gcsettings.cutoffdisc==1 });
             }
         case 'Pb-Pb':
             out.add({ "common.Pb": gcsettings.commonPb });
@@ -259,9 +257,9 @@ function getOptions(prefs){
                 out.addRaw({ "cutoff.disc": "IsoplotR::discfilter(" +
                     "option=" + opt + "," +
                     "cutoff=c(" + gcsettings.mindisc[opt-1] +
-                    "," + gcsettings.maxdisc[opt-1] + "),"
+                    "," + gcsettings.maxdisc[opt-1] +
+                    "),before=" + stringify(gcsettings.cutoffdisc==1) +  ")",
                 });
-                out.add({ before: gcsettings.cutoffdisc==1 });
             }
         case 'Pb-Pb':
             out.add({ "common.Pb": gcsettings.commonPb });
@@ -343,9 +341,9 @@ function getOptions(prefs){
                 out.addRaw({ "cutoff.disc": "IsoplotR::discfilter(" +
                     "option=" + opt + "," +
                     "cutoff=c(" + gcsettings.mindisc[opt-1] +
-                    "," + gcsettings.maxdisc[opt-1] + "),"
-        });
-        out.add({ before: gcsettings.cutoffdisc==1 });
+                    "," + gcsettings.maxdisc[opt-1] +
+                    "),before=" + stringify(gcsettings.cutoffdisc==1) +  ")",
+                });
             }
         case 'Pb-Pb':
             out.add({ "common.Pb": gcsettings.commonPb });
@@ -395,9 +393,9 @@ function getOptions(prefs){
                 out.addRaw({ "cutoff.disc": "IsoplotR::discfilter(" +
                     "option=" + opt + "," +
                     "cutoff=c(" + gcsettings.mindisc[opt-1] +
-                    "," + gcsettings.maxdisc[opt-1] + "),"
-        });
-        out.add({before: gcsettings.cutoffdisc==1 });
+                    "," + gcsettings.maxdisc[opt-1] +
+                    "),before=" + stringify(gcsettings.cutoffdisc==1) +  ")",
+                });
             }
         case 'Pb-Pb':
             out.add({ "common.Pb": gcsettings.commonPb });
@@ -406,9 +404,9 @@ function getOptions(prefs){
         }
         if (geochronometer=='detritals'){
             out.add({
-            col: pdsettings.colmap,
+                col: pdsettings.colmap,
                 hide: gcsettings.hide
-        });
+            });
         } else {
             out.addRaw({ hide: "omitter(flags=c('x','X'))" });
         }

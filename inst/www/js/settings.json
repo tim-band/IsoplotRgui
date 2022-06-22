@@ -229,8 +229,8 @@
 	"pch": 21,
 	"pos": 0,
 	"cex": 5,
-	"col": "black",
-	"bg": "white"
+	"col": "#000000",
+	"bg": "#FFFFFF"
     },
     "helioplot": {
 	"logratio": true,
